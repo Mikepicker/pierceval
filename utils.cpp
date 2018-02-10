@@ -1,0 +1,4 @@
+Entity* pickClosestEnemy(Entity* entity) {
+
+
+}
