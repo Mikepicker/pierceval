@@ -22,12 +22,15 @@ const float CAMERA_SPEED = 1;
 const Sint32 ENTITY_SIZE = 64;
 const Sint32 ENTITY_ANIM_SPEED = 5000;
 const float PLAYER_SPEED = 0.005f;
+const float ENTITY_SPEED = 0.002f;
 const Sint32 MAX_ARROWS = 100;
-const Sint32 MAX_ENEMIES = 100;
+const Sint32 MAX_ENTITIES = 100;
 const Sint32 TILE_SIZE = 64;
 const Sint32 MAX_WALLS = 100;
 const float ARROW_FLY_TIME = 1000;
 const float GROUND_POS = SCREEN_HEIGHT - 64;
+const Sint32 FIRE_RATE = 1000;
+const Sint32 FADE_RATE = 1;
 
 // Textures
 SDL_Texture* archerTexture;
@@ -46,12 +49,6 @@ SDL_Texture* silhouetteTexture;
 // Font
 TTF_Font* font = NULL;
 
-// Team
-enum Team {
-  BLUE = 0,
-  RED = 1
-};
-
 enum Anim {
   ANIM_IDLE = 0,
   ANIM_MOVE = 1,
@@ -64,6 +61,17 @@ enum State {
   STATE_MOVE = 1,
   STATE_ATTACK = 2,
   STATE_DIE = 3
+};
+
+enum Team {
+  TEAM_BLUE = 0,
+  TEAM_RED = 1
+};
+
+enum EntityType {
+  SPEARMAN = 0,
+  ARCHER = 1,
+  RAM = 2
 };
 
 // Camera
@@ -79,12 +87,19 @@ struct Entity {
   float vx, vy;
   Sint32 w, h;
   SDL_RendererFlip flip;
+  EntityType type;
   State state;
+  Team team;
   Sint32 frameX;
   Anim anim;
   SDL_Texture* texture;
   bool animCompleted;
+  bool attacked;
   bool alive;
+  bool onWall;
+  float alpha;
+  Sint32 hp;
+  Uint32 lastAttackTime;
 };
 
 struct Arrow {
@@ -94,12 +109,15 @@ struct Arrow {
   float startx, starty;
   float angle; 
   float time;
+  float alpha;
   Entity* target;
+  Entity* owner;
   bool alive;
 };
 
 struct Wall {
-  Sint32 w, h;
+  float x, y;
+  Sint32 w,h;
   bool alive;
 };
 
@@ -116,7 +134,8 @@ Entity player;
 Entity spearman, archer, ram;
 Arrow arrows[MAX_ARROWS];
 Wall walls[MAX_WALLS][4];
-Entity* enemies[MAX_ENEMIES];
+Entity blueEntities[MAX_ENTITIES];
+Entity redEntities[MAX_ENTITIES];
 float lastAnimTick;
 
 // Custom Blend Mode for Silhouettes
@@ -131,8 +150,12 @@ enum GameState {
   STATE_GAME
 } gameState;
 
-#include "game.cpp"
+#include "utils.cpp"
 #include "entity.cpp"
+#include "game.cpp"
+#include "player.cpp"
+#include "ai.cpp"
+#include "input.cpp"
 
 bool load() {
 
@@ -159,38 +182,14 @@ bool load() {
 
     // Init textures
     spearmanTexture = loadTexture("assets/spearman.png");
-    spearman.texture = spearmanTexture;
-    spearman.x = 600;
-    spearman.y = SCREEN_HEIGHT - 64 - 64;
-    spearman.w = 64;
-    spearman.h = 64;
-    spearman.frameX = 0;
-    spearman.anim = ANIM_IDLE;
-    spearman.state = STATE_IDLE;
-
     archerTexture = loadTexture("assets/archer.png");
-    archer.texture = archerTexture;
-    archer.x = 100;
-    archer.y = SCREEN_HEIGHT - 64 - 64;
-    archer.w = 64;
-    archer.h = 64;
-    archer.frameX = 0;
-    archer.anim = ANIM_IDLE;
-    archer.state = STATE_IDLE;
-
     ramTexture = loadTexture("assets/ram.png");
-    ram.texture = ramTexture;
-    ram.x = 100;
-    ram.y = SCREEN_HEIGHT - 64 - 64;
-    ram.w = 128;
-    ram.h = 64;
-    ram.frameX = 0;
-    ram.anim = ANIM_MOVE;
-
+    
     arrowTexture = loadTexture("assets/arrow.png");
     for (Sint32 i = 0; i < MAX_ARROWS; i++) {
       arrows[i].w = 12;
       arrows[i].h = 2;
+      arrows[i].alpha = 255;
     }
 
     bg0Texture = loadTexture("assets/bg_0.png");
@@ -200,32 +199,34 @@ bool load() {
 
     /* Walls */
     wallsTexture = loadTexture("assets/walls.png");
-    walls[6][0].w = 64;
-    walls[6][0].h = 64;
-    walls[6][0].alive = true;
+    for (Sint32 i = 0; i < MAX_WALLS; i++) {
+      walls[i][0].x = i * TILE_SIZE;
+      walls[i][0].y = GROUND_POS - TILE_SIZE;
+      walls[i][0].w = TILE_SIZE;
+      walls[i][0].h = TILE_SIZE;
+    }
+
+    walls[7][0].alive = true;
+    walls[8][0].alive = true;
 
     // Player
-    player.texture = archerTexture;
-    player.x = 200;
-    player.y = GROUND_POS - 64;
-    player.w = 64;
-    player.h = 64;
-    player.frameX = 0;
-    player.anim = ANIM_IDLE;
-    player.state = STATE_IDLE;
+    createPlayer();
 
     // Silhouettes custom blend mode
-    /*silhouetteBlendMode = SDL_ComposeCustomBlendMode(
+    silhouetteBlendMode = SDL_ComposeCustomBlendMode(
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
         SDL_BLENDOPERATION_ADD,
         SDL_BLENDFACTOR_ZERO,
         SDL_BLENDFACTOR_ONE,
         SDL_BLENDOPERATION_ADD
-        );*/
+        );
 
     // Blank texture for silhouette blitting
     silhouetteTexture = createBlankTexture(SCREEN_WIDTH, SCREEN_HEIGHT, SDL_TEXTUREACCESS_TARGET); 
+
+    // Spawn some entities
+    createEntity(SPEARMAN, 100, GROUND_POS - 64, TEAM_RED);
 
     return success;
 }
@@ -244,30 +245,7 @@ void close() {
 // Game logic
 void input(SDL_Event* e) {
 
-  SDL_Scancode code = e->key.keysym.scancode;
-  if (e->type == SDL_KEYUP) {
-    if (code == SDL_SCANCODE_SPACE) {
-      fireArrow(&player, &spearman);
-    }
-
-    if (code == SDL_SCANCODE_LEFT) {
-      player.vx = 0;
-      toStateIdle(&player);
-    } else if (code == SDL_SCANCODE_RIGHT) {
-      player.vx = 0;
-      toStateIdle(&player);
-    }
-  }
-
-  if (e->type == SDL_KEYDOWN) {
-    if (code == SDL_SCANCODE_LEFT) {
-      player.vx = -PLAYER_SPEED;
-      toStateMove(&player);
-    } else if (code == SDL_SCANCODE_RIGHT) {
-      player.vx = PLAYER_SPEED;
-      toStateMove(&player);
-    }
-  }
+  updateInput(e); 
 
 }
 
@@ -277,15 +255,16 @@ void update(float dt) {
   updateCamera(dt);
 
   /* Entities */
-  updateEntity(&player);
-  updateEntity(&archer);
-  updateEntity(&spearman);
-  updateEntity(&ram);
-  ram.x += 0.01f * dt;
+  updatePlayer(dt);
+  updateTeam(TEAM_BLUE, dt);
+  updateTeam(TEAM_RED, dt);
+  //ram.x += 0.01f * dt;
 
   /* Arrows */
   updateArrows(dt);
 
+  /* AI */
+  updateAI();
 }
 
 void render() {
@@ -299,17 +278,13 @@ void render() {
   renderGround();
 
   // Render entities
-  // renderEntity(&player);
-  //    renderEntity(&archer);
-  renderEntity(&spearman);
-  // renderEntity(&ram);
+  renderEntity(&player);
+  renderTeam(TEAM_BLUE);
+  renderTeam(TEAM_RED);
   renderArrows();
 
   // Render buildings
   renderWalls();
-
-  // Render silhouettes
-  //renderSilhouette(&player);
 
   // Bg color
   SDL_SetRenderDrawColor(renderer, 0xff, 0xf8, 0xec, 0xc9);

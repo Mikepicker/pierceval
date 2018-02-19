@@ -182,6 +182,14 @@ bool renderText(TTF_Font* font, std::string textureText, SDL_Color textColor, SD
   return newTexture != NULL;
 }
 
+void renderRect(SDL_Rect r) {
+  SDL_RenderFillRect(renderer, &r);
+}
+
+void setRenderColor(Uint8 r, Uint8 g, Uint8 b, Uint8 a) {
+  SDL_SetRenderDrawColor(renderer, r, g, b, a);
+}
+
 void setRenderTarget(SDL_Texture* texture) {
   SDL_SetRenderTarget(renderer, texture);
 }
