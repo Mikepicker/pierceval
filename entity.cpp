@@ -177,11 +177,11 @@ void renderEntity(Entity* entity) {
   renderSprite(entity->texture, currFrameX, currFrameY, entity->w, entity->h, entity->x - camera.x, entity->y, entity->w, entity->h, entity->flip, 0, entity->alpha);
 
   // Render health bar
-  SDL_Rect redBar = {(Sint32)entity->x + 16, (Sint32)entity->y - 4, 32, 4};
+  SDL_Rect redBar = {(Sint32)entity->x + 16, (Sint32)entity->y - 4, 32, 2};
   setRenderColor(0xff, 0x00, 0x00, 0xff);
   renderRect(redBar);
 
-  SDL_Rect healthBar = {(Sint32)entity->x + 16, (Sint32)entity->y - 4, entity->hp * 32 / 100, 4};
+  SDL_Rect healthBar = {(Sint32)entity->x + 16, (Sint32)entity->y - 4, entity->hp * 32 / 100, 2};
   setRenderColor(0x00, 0xff, 0x00, 0xff);
   renderRect(healthBar);
 

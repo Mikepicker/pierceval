@@ -227,6 +227,7 @@ bool load() {
 
     // Spawn some entities
     createEntity(SPEARMAN, 100, GROUND_POS - 64, TEAM_RED);
+    //createEntity(RAM, 100, GROUND_POS - 64, TEAM_RED);
 
     return success;
 }

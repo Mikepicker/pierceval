@@ -155,10 +155,12 @@ void fireArrow(Entity* entity, Entity* target) {
     arrow->y = entity->y + entity->h/2;
     arrow->startx = arrow->x;
     arrow->starty = arrow->y;
-    float dx = (target->x + target->w/2 + target->vx * ARROW_FLY_TIME * 50) - (entity->x + entity->w/2);
+    //printf("%f %f %f\n", target->vx * ARROW_FLY_TIME, target->x + target->w/2, entity->w);
+    float dx = (target->x + target->w/2 + target->vx * ARROW_FLY_TIME / TIME_STEP) - (entity->x + entity->w/2);
     float dy = (target->y + target->h/2) - (entity->y + entity->h/2);
+    printf("%f\n", dy);
     arrow->vx = (float)dx / ARROW_FLY_TIME;
-    arrow->vy = -(dy + 0.5 * world.gravity * ARROW_FLY_TIME * ARROW_FLY_TIME) / ARROW_FLY_TIME;
+    arrow->vy = -(-dy + 0.5 * world.gravity * ARROW_FLY_TIME * ARROW_FLY_TIME) / ARROW_FLY_TIME;
     arrow->time = 0;
     arrow->target = target;
     arrow->owner = entity;
